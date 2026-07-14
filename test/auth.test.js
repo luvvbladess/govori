@@ -123,6 +123,56 @@ test('protected route without a session returns 401', async () => {
   }
 });
 
+test('login with malformed input returns 400 JSON, not an HTML error page', async () => {
+  const { app } = buildTestApp();
+  const server = await startServer(app);
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const res = await fetch(`${baseUrl}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: { foo: 'bar' }, password: 'x' }),
+    });
+    assert.equal(res.status, 400);
+    assert.match(res.headers.get('content-type') || '', /application\/json/);
+    const body = await res.json();
+    assert.equal(body.ok, false);
+    assert.equal(body.code, 'INVALID_INPUT');
+  } finally {
+    server.close();
+  }
+});
+
+test('register then login succeeds end-to-end (session.regenerate does not break login)', async () => {
+  const { app } = buildTestApp();
+  const server = await startServer(app);
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  try {
+    await fetch(`${baseUrl}/api/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'd@example.com', password: 'password123' }),
+    });
+
+    const jar = { cookie: '' };
+    const loginRes = await fetchWithCookies(baseUrl, '/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'd@example.com', password: 'password123' }),
+    }, jar);
+    assert.equal(loginRes.status, 200);
+    const body = await loginRes.json();
+    assert.equal(body.ok, true);
+    assert.equal(body.email, 'd@example.com');
+    assert.equal(body.targetLanguage, null);
+
+    const me = await fetchWithCookies(baseUrl, '/api/auth/me', {}, jar);
+    assert.equal(me.status, 200);
+  } finally {
+    server.close();
+  }
+});
+
 test('logout clears the session', async () => {
   const { app } = buildTestApp();
   const server = await startServer(app);

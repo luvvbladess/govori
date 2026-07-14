@@ -14,28 +14,48 @@ function createAuthRouter(db) {
       });
     }
 
-    const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
-    if (existing) {
-      return res.status(409).json({ ok: false, code: 'EMAIL_TAKEN', message: 'Такой email уже зарегистрирован.' });
+    try {
+      const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+      if (existing) {
+        return res.status(409).json({ ok: false, code: 'EMAIL_TAKEN', message: 'Такой email уже зарегистрирован.' });
+      }
+
+      const passwordHash = await bcrypt.hash(password, 12);
+      const info = db
+        .prepare('INSERT INTO users (email, password_hash, target_language, created_at) VALUES (?, ?, NULL, ?)')
+        .run(email, passwordHash, new Date().toISOString());
+
+      req.session.userId = info.lastInsertRowid;
+      res.json({ ok: true, email, targetLanguage: null });
+    } catch (err) {
+      if (err && err.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+        return res.status(409).json({ ok: false, code: 'EMAIL_TAKEN', message: 'Такой email уже зарегистрирован.' });
+      }
+      res.status(500).json({ ok: false, code: 'INTERNAL_ERROR', message: 'Не удалось выполнить регистрацию.' });
     }
-
-    const passwordHash = await bcrypt.hash(password, 12);
-    const info = db
-      .prepare('INSERT INTO users (email, password_hash, target_language, created_at) VALUES (?, ?, NULL, ?)')
-      .run(email, passwordHash, new Date().toISOString());
-
-    req.session.userId = info.lastInsertRowid;
-    res.json({ ok: true, email, targetLanguage: null });
   });
 
   router.post('/login', async (req, res) => {
     const { email, password } = req.body || {};
-    const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
-    if (!user || !(await bcrypt.compare(password || '', user.password_hash))) {
-      return res.status(401).json({ ok: false, code: 'INVALID_CREDENTIALS', message: 'Неверный email или пароль.' });
+    if (typeof email !== 'string' || !email.trim() || typeof password !== 'string') {
+      return res.status(400).json({ ok: false, code: 'INVALID_INPUT', message: 'Укажите email и пароль.' });
     }
-    req.session.userId = user.id;
-    res.json({ ok: true, email: user.email, targetLanguage: user.target_language });
+
+    try {
+      const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
+      if (!user || !(await bcrypt.compare(password, user.password_hash))) {
+        return res.status(401).json({ ok: false, code: 'INVALID_CREDENTIALS', message: 'Неверный email или пароль.' });
+      }
+      req.session.regenerate((err) => {
+        if (err) {
+          return res.status(500).json({ ok: false, code: 'INTERNAL_ERROR', message: 'Не удалось выполнить вход.' });
+        }
+        req.session.userId = user.id;
+        res.json({ ok: true, email: user.email, targetLanguage: user.target_language });
+      });
+    } catch (err) {
+      res.status(500).json({ ok: false, code: 'INTERNAL_ERROR', message: 'Не удалось выполнить вход.' });
+    }
   });
 
   router.post('/logout', (req, res) => {
