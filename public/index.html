@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Переводчик</title>
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+  <section id="auth-screen">
+    <h1>Переводчик</h1>
+    <form id="auth-form">
+      <input type="email" id="auth-email" placeholder="Email" required autocomplete="email">
+      <input type="password" id="auth-password" placeholder="Пароль" required autocomplete="current-password" minlength="8">
+      <button type="submit" id="auth-submit">Войти</button>
+      <button type="button" id="auth-toggle-mode">Нет аккаунта? Зарегистрироваться</button>
+      <p id="auth-error" class="error" hidden></p>
+    </form>
+  </section>
+
+  <section id="translator-screen" hidden>
+    <!-- built out in Task 9 -->
+  </section>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+</body>
+</html>
