@@ -19,10 +19,28 @@
   </section>
 
   <section id="translator-screen" hidden>
-    <!-- built out in Task 9 -->
+    <header id="pair-bar">
+      <span id="pair-indicator">Язык собеседника не задан</span>
+      <button id="change-language-btn">Сменить язык</button>
+    </header>
+
+    <main id="feed"></main>
+
+    <dialog id="language-dialog">
+      <h2>Выберите язык собеседника</h2>
+      <ul id="language-list"></ul>
+      <button id="language-dialog-close">Закрыть</button>
+    </dialog>
+
+    <footer id="input-bar">
+      <button id="mic-btn" type="button" aria-label="Голосовой ввод">🎤</button>
+      <input id="text-input" type="text" placeholder="Введите сообщение" autocomplete="off">
+      <button id="send-btn" type="button" aria-label="Отправить">➤</button>
+    </footer>
   </section>
 
   <script src="/js/api.js"></script>
   <script src="/js/auth.js"></script>
+  <script src="/js/translator.js"></script>
 </body>
 </html>
