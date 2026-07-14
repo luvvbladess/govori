@@ -27,6 +27,8 @@
 2. Склонировать репозиторий на сервер, `npm install --omit=dev`, заполнить `.env`
    (реальный `SESSION_SECRET`, `OPENAI_API_KEY`).
 3. Запустить процесс постоянно, например через systemd или pm2 (`pm2 start server.js --name translator`).
+   Установить `NODE_ENV=production` (в `.env` или окружении сервиса) — иначе Express
+   может включать stack trace в ответ об ошибке.
 4. В Cloudflare: A-запись на IP сервера, SSL/TLS режим Full (или Full strict, если
    на origin тоже настроен сертификат) — этого достаточно, чтобы браузер видел
    `https://` и разрешал доступ к микрофону.

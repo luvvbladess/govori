@@ -41,6 +41,14 @@ function createApp({ db, openaiClient }) {
 
   app.use(express.static(path.join(__dirname, '..', 'public')));
 
+  // Catch-all error handler: prevents stack traces from leaking in HTTP
+  // responses for any unhandled error thrown by a route (sync DB/bcrypt
+  // errors, etc). Must be last, and must keep all 4 params for Express to
+  // recognize it as an error handler.
+  app.use((err, req, res, next) => {
+    res.status(500).json({ ok: false, code: 'INTERNAL_ERROR', message: 'Внутренняя ошибка сервера.' });
+  });
+
   return app;
 }
 

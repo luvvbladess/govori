@@ -138,3 +138,37 @@ test('set-language validates against the fixed list and persists', async () => {
     server.close();
   }
 });
+
+test('a thrown error in a route handler is converted to clean JSON, not a stack trace', async () => {
+  const db = createDb(':memory:');
+  const app = createApp({ db, openaiClient: fakeOpenaiClient([]) });
+  const server = await startServer(app);
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  const jar = { cookie: '' };
+  try {
+    await fetchWithCookies(baseUrl, '/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'errtest@example.com', password: 'password123' }),
+    }, jar);
+
+    const originalPrepare = db.prepare.bind(db);
+    db.prepare = () => { throw new Error('simulated db failure'); };
+    try {
+      const res = await fetchWithCookies(baseUrl, '/api/translator/set-language', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ language: 'Немецкий' }),
+      }, jar);
+      assert.equal(res.status, 500);
+      assert.equal(res.headers.get('content-type').includes('application/json'), true);
+      const body = await res.json();
+      assert.equal(body.ok, false);
+      assert.equal(body.code, 'INTERNAL_ERROR');
+    } finally {
+      db.prepare = originalPrepare;
+    }
+  } finally {
+    server.close();
+  }
+});
