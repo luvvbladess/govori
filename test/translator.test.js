@@ -3,12 +3,12 @@ const assert = require('node:assert/strict');
 const { createTranslator } = require('../src/translator');
 
 function fakeClient(responses) {
-  let call = 0;
+  const calls = [];
   return {
-    calls: [],
+    calls,
     callOpenAI: async (currentTarget, text, options) => {
-      const entry = { currentTarget, text, options };
-      return responses[Math.min(call++, responses.length - 1)];
+      calls.push({ currentTarget, text, options });
+      return responses[Math.min(calls.length - 1, responses.length - 1)];
     },
   };
 }
@@ -96,6 +96,7 @@ test('7-8. Russian source wrongly echoed as the Chinese translation retries once
   ]);
   const translator = createTranslator(client);
   const result = await translator.translateText({ target_language: 'Китайский' }, 'Мы посетим фабрику');
+  assert.equal(client.calls.length, 2);
   assert.equal(result.ok, false);
   assert.equal(result.code, 'TRANSLATION_FAILED');
 });
@@ -107,6 +108,7 @@ test('7b. A single bad attempt is corrected by the retry and succeeds', async ()
   ]);
   const translator = createTranslator(client);
   const result = await translator.translateText({ target_language: 'Китайский' }, 'Мы посетим фабрику');
+  assert.equal(client.calls.length, 2);
   assert.equal(result.ok, true);
   assert.equal(result.translation, '我们将参观工厂');
 });
