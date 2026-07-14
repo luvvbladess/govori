@@ -29,6 +29,12 @@ test('parseModelResponse returns null on invalid JSON', () => {
   assert.equal(parseModelResponse('not json at all'), null);
 });
 
+test('parseModelResponse returns null when the parsed JSON is not an object (e.g. bare null)', () => {
+  assert.equal(parseModelResponse('null'), null);
+  assert.equal(parseModelResponse('42'), null);
+  assert.equal(parseModelResponse('"just a string"'), null);
+});
+
 test('parseModelResponse returns null when translation is missing/empty', () => {
   assert.equal(parseModelResponse('{"detected_lang":"Русский","translation":"","new_target_lang":null}'), null);
   assert.equal(parseModelResponse('{"detected_lang":"Русский","new_target_lang":null}'), null);

@@ -31,6 +31,7 @@ function parseModelResponse(raw) {
     return null;
   }
 
+  if (parsed === null || typeof parsed !== 'object') return null;
   if (typeof parsed.translation !== 'string' || !parsed.translation.trim()) return null;
   if (typeof parsed.detected_lang !== 'string' || !parsed.detected_lang.trim()) return null;
   if (parsed.new_target_lang !== null && typeof parsed.new_target_lang !== 'string') return null;
