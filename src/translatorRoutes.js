@@ -2,6 +2,7 @@ const express = require('express');
 const rateLimit = require('express-rate-limit');
 const { isKnownLanguage, codeForLanguage, matchesLanguageAlphabet } = require('./languages');
 const { readSpeech, writeSpeech } = require('./speechCache');
+const { SPEECH_VOICES, isSpeechVoice, getDefaultVoice, getSpeechModel } = require('./speechVoices');
 
 const MAX_AUDIO_BYTES = 24 * 1024 * 1024;
 const FREE_TRANSLATIONS = 3;
@@ -28,6 +29,10 @@ function requireRegistered(req, res) {
 function createTranslatorRouter(db, translator) {
   const router = express.Router();
   const limiter = rateLimit({ windowMs: 60 * 1000, max: 20, keyGenerator: (req) => String(req.user.id), standardHeaders: true, legacyHeaders: false });
+
+  router.get('/voices', (req, res) => {
+    res.set('Cache-Control', 'no-store').json({ ok: true, voices: SPEECH_VOICES, defaultVoice: getDefaultVoice() });
+  });
 
   router.post('/translate', limiter, async (req, res, next) => {
     try {
@@ -65,13 +70,15 @@ function createTranslatorRouter(db, translator) {
 
   router.post('/speech', limiter, async (req, res, next) => {
     try {
-      const { text, language } = req.body || {};
+      const { text, language, voice = getDefaultVoice() } = req.body || {};
       if (typeof text !== 'string' || !text.trim()) return res.status(400).json({ ok: false, code: 'INVALID_INPUT', message: 'Не удалось подготовить озвучку.' });
+      if (!isSpeechVoice(voice)) return res.status(400).json({ ok: false, code: 'INVALID_VOICE', message: 'Выберите голос из списка.' });
       const languageName = typeof language === 'string' ? language : 'исходном';
-      let audio = await readSpeech(req.user.id, text, languageName);
+      const speechOptions = { voice, model: getSpeechModel() };
+      let audio = await readSpeech(req.user.id, text, languageName, speechOptions);
       if (!audio) {
-        audio = await translator.createSpeech(text, languageName);
-        writeSpeech(req.user.id, text, languageName, audio).catch((error) => console.error('Speech cache write failed:', error));
+        audio = await translator.createSpeech(text, languageName, voice);
+        writeSpeech(req.user.id, text, languageName, audio, speechOptions).catch((error) => console.error('Speech cache write failed:', error));
       }
       res.set({ 'Content-Type': 'audio/mpeg', 'Content-Length': audio.length, 'Cache-Control': 'private, no-store' }).send(audio);
     } catch (error) { next(error); }

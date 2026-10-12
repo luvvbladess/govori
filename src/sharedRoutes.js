@@ -2,18 +2,28 @@ const express = require('express');
 const rateLimit = require('express-rate-limit');
 const { randomUUID, randomBytes } = require('node:crypto');
 const { isKnownLanguage, codeForLanguage } = require('./languages');
-function createSharedRouter(db, translator) {
+function createSharedRouter(db, translator, {now: clock=Date.now,publishNewMessage=async()=>{}}={}) {
   const router = express.Router();
   const limiter = rateLimit({ windowMs: 60000, max: 30, keyGenerator: (req) => String(req.user.id), standardHeaders: true, legacyHeaders: false });
+  const speakingLimiter = rateLimit({ windowMs: 60000, max: 120, keyGenerator: (req) => String(req.user.id), standardHeaders: true, legacyHeaders: false });
   const now = () => new Date().toISOString();
   const translating = new Map();
-  function memberFor(req, roomId) {
-    const account = db.prepare('SELECT * FROM shared_members WHERE room_id=? AND user_key=?').get(roomId, String(req.user.id));
-    return account || db.prepare('SELECT * FROM shared_members WHERE room_id=? AND id=?').get(roomId, req.session.sharedRooms?.[roomId] || '');
+  const speaking = new Map();
+  const speakingTtlMs = 6000;
+  function isSpeaking(memberId) {
+    const expiresAt = speaking.get(memberId);
+    if (expiresAt > clock()) return true;
+    speaking.delete(memberId);
+    return false;
   }
-  function remember(req, member) { req.session.sharedRooms ||= {}; req.session.sharedRooms[member.room_id] = member.id; }
+  function memberFor(req, roomId) {
+    const account = db.prepare('SELECT * FROM shared_members WHERE room_id=? AND user_key=? AND left_at IS NULL').get(roomId, String(req.user.id));
+    return account || db.prepare('SELECT * FROM shared_members WHERE room_id=? AND id=? AND left_at IS NULL').get(roomId, req.session.sharedRooms?.[roomId] || '');
+  }
+  function remember(req, member) { req.session.sharedRooms = { ...req.session.sharedRooms, [member.room_id]: member.id }; }
   function roomView(room, member) {
-    const participants = db.prepare('SELECT id,role,name,language,last_seen AS lastSeen FROM shared_members WHERE room_id=? ORDER BY rowid').all(room.id);
+    const participants = db.prepare('SELECT id,role,name,language,last_seen AS lastSeen FROM shared_members WHERE room_id=? AND left_at IS NULL ORDER BY rowid').all(room.id)
+      .map(participant=>({...participant,speaking:isSpeaking(participant.id)}));
     return { id:room.id, title:room.title, sourceLanguage:member.language,
       targetLanguage:member.language === room.source_language ? room.target_language : room.source_language,
       memberId:member.id, role:member.role, inviteToken:member.role === 'host' ? room.invite_token : undefined, participants };
@@ -40,12 +50,12 @@ function createSharedRouter(db, translator) {
     const key = `${message.id}:${language}`;
     if (translating.has(key)) return translating.get(key);
     const saved = db.prepare('SELECT text,status FROM shared_translations WHERE message_id=? AND language=?').get(message.id,language);
-    if (saved && (saved.status === 'translated' || !retry)) return saved;
+    if (saved && (saved.status === 'translated' || (saved.status === 'failed' && !retry))) return saved;
     db.prepare("INSERT INTO shared_translations VALUES (?,?,NULL,'pending') ON CONFLICT(message_id,language) DO UPDATE SET status='pending'").run(message.id,language);
     const work = (async()=>{
       let text=null; let status='failed';
       try {
-        const result=await translator.translateText({source_language:message.sourceLanguage,target_language:language},message.sourceText);
+        const result=await translator.translateText({source_language:message.sourceLanguage,target_language:language},message.sourceText,{fixedDirection:true});
         if (result.ok && result.sourceLanguage===message.sourceLanguage && result.targetLanguage===language) {text=result.translation;status='translated';}
       } catch { /* Keep the original when one language is unavailable. */ }
       db.prepare('UPDATE shared_translations SET text=?,status=? WHERE message_id=? AND language=?').run(text,status,message.id,language);
@@ -62,14 +72,14 @@ function createSharedRouter(db, translator) {
     const id=randomUUID(),token=randomBytes(32).toString('hex'),memberId=randomUUID();
     db.transaction(()=>{
       db.prepare('INSERT INTO shared_rooms (id,owner_id,invite_token,source_language,target_language,created_at,title) VALUES (?,?,?,?,?,?,?)').run(id,req.user.id,token,sourceLanguage,targetLanguage,now(),title?.trim()||'');
-      db.prepare('INSERT INTO shared_members VALUES (?,?,?,?,?,?,?)').run(memberId,id,String(req.user.id),'host',typeof name==='string'&&name.trim()?name.trim().slice(0,60):'1',now(),sourceLanguage);
+      db.prepare('INSERT INTO shared_members (id,room_id,user_key,role,name,last_seen,language) VALUES (?,?,?,?,?,?,?)').run(memberId,id,String(req.user.id),'host',typeof name==='string'&&name.trim()?name.trim().slice(0,60):'1',now(),sourceLanguage);
     })();
     const member=memberFor(req,id);remember(req,member);res.json({ok:true,room:roomView(db.prepare('SELECT * FROM shared_rooms WHERE id=?').get(id),member)});
   });
   router.get('/',(req,res)=>{
     res.set('Cache-Control','no-store');
     const remembered=Object.values(req.session.sharedRooms||{}).slice(-100);
-    const rooms=db.prepare(`SELECT DISTINCT r.* FROM shared_rooms r JOIN shared_members p ON p.room_id=r.id WHERE p.user_key=? ${remembered.length?`OR p.id IN (${remembered.map(()=>'?').join(',')})`:''} ORDER BY r.created_at DESC`).all(String(req.user.id),...remembered);
+    const rooms=db.prepare(`SELECT DISTINCT r.* FROM shared_rooms r JOIN shared_members p ON p.room_id=r.id WHERE p.left_at IS NULL AND (p.user_key=? ${remembered.length?`OR p.id IN (${remembered.map(()=>'?').join(',')})`:''}) ORDER BY r.created_at DESC`).all(String(req.user.id),...remembered);
     res.json({ok:true,rooms:rooms.map(room=>roomView(room,memberFor(req,room.id)))});
   });
   router.get('/invite/:token',(req,res)=>{
@@ -85,10 +95,30 @@ function createSharedRouter(db, translator) {
     if (language!==undefined&&!isKnownLanguage(language)) return res.status(400).json({ok:false,code:'INVALID_LANGUAGE_PAIR'});
     let member=memberFor(req,room.id);
     if (!member) {
-      const id=randomUUID();db.prepare('INSERT INTO shared_members VALUES (?,?,?,?,?,?,?)').run(id,room.id,String(req.user.id),'guest',typeof name==='string'&&name.trim()?name.trim().slice(0,60):'2',now(),language||room.target_language);
-      member=db.prepare('SELECT * FROM shared_members WHERE id=?').get(id);
+      const departed=db.prepare('SELECT * FROM shared_members WHERE room_id=? AND user_key=? AND left_at IS NOT NULL').get(room.id,String(req.user.id));
+      if (departed) {
+        const memberName=typeof name==='string'&&name.trim()?name.trim().slice(0,60):departed.name;
+        db.prepare('UPDATE shared_members SET left_at=NULL,last_seen=?,name=?,language=? WHERE id=?').run(now(),memberName,language||departed.language,departed.id);
+        member=db.prepare('SELECT * FROM shared_members WHERE id=?').get(departed.id);
+      } else {
+        const id=randomUUID();db.prepare('INSERT INTO shared_members (id,room_id,user_key,role,name,last_seen,language) VALUES (?,?,?,?,?,?,?)').run(id,room.id,String(req.user.id),'guest',typeof name==='string'&&name.trim()?name.trim().slice(0,60):'2',now(),language||room.target_language);
+        member=db.prepare('SELECT * FROM shared_members WHERE id=?').get(id);
+      }
     }
     remember(req,member);res.json({ok:true,room:roomView(room,member)});
+  });
+  router.post('/:id/leave',access,(req,res)=>{
+    db.prepare('UPDATE shared_members SET left_at=? WHERE id=?').run(now(),req.member.id);
+    speaking.delete(req.member.id);
+    req.session.sharedRooms=Object.fromEntries(Object.entries(req.session.sharedRooms||{}).filter(([roomId])=>roomId!==req.room.id));
+    res.json({ok:true});
+  });
+  router.post('/:id/speaking',access,speakingLimiter,(req,res)=>{
+    const body=req.body;
+    if (!body||typeof body.speaking!=='boolean'||Object.keys(body).length!==1) return res.status(400).json({ok:false,code:'INVALID_INPUT'});
+    if (body.speaking) speaking.set(req.member.id,clock()+speakingTtlMs);
+    else speaking.delete(req.member.id);
+    res.json({ok:true});
   });
   router.get('/:id',access,async(req,res,next)=>{
     try {
@@ -112,9 +142,11 @@ function createSharedRouter(db, translator) {
       if(message) db.prepare("UPDATE shared_messages SET status='pending' WHERE id=?").run(message.id);
       else {
         const info=db.prepare(`INSERT INTO shared_messages (room_id,member_id,request_id,source_text,source_language,target_language,status,created_at) VALUES (?,?,?,?,?,?,'pending',?)`).run(req.room.id,req.member.id,requestId,text.trim(),sourceLanguage,targetLanguage,now());message={id:Number(info.lastInsertRowid)};
+        try { Promise.resolve(publishNewMessage({roomId:req.room.id,messageId:message.id,senderMemberId:req.member.id})).catch(()=>console.error('New-message notification could not be delivered.')); }
+        catch { console.error('New-message notification could not be delivered.'); }
       }
       const view=messageView(message.id);
-      const languages=[...new Set([targetLanguage,...db.prepare('SELECT DISTINCT language FROM shared_members WHERE room_id=?').all(req.room.id).map(p=>p.language)])].filter(language=>language!==sourceLanguage);
+      const languages=[...new Set([targetLanguage,...db.prepare('SELECT DISTINCT language FROM shared_members WHERE room_id=? AND left_at IS NULL').all(req.room.id).map(p=>p.language)])].filter(language=>language!==sourceLanguage);
       const outcomes=await Promise.all(languages.map(async language=>({language,...await translateFor(view,language,true)})));
       const primary=outcomes.find(t=>t.language===targetLanguage&&t.status==='translated')||outcomes.find(t=>t.status==='translated');
       if(!primary) {db.prepare("UPDATE shared_messages SET status='failed' WHERE id=?").run(message.id);return res.status(502).json({ok:false,code:'TRANSLATION_FAILED',message:messageView(message.id)});}

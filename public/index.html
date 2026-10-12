@@ -4,10 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#f6f8fb">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/icons/govori-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
   <title>Говори</title>
   <link rel="stylesheet" href="/css/app.css">
   <link rel="stylesheet" href="/css/guest-access.css">
   <link rel="stylesheet" href="/css/shared.css">
+  <link rel="stylesheet" href="/css/mobile.css">
 </head>
 <body>
   <div class="app-preferences" data-i18n-aria="settings.interface" aria-label="Настройки интерфейса">
@@ -73,6 +77,7 @@
       <div class="shared-setup-actions"><button id="shared-start" class="primary-button" type="button" data-i18n="shared.start">Создать беседу</button><button id="shared-cancel" type="button" data-i18n="shared.cancel">Отмена</button></div>
       <p id="shared-setup-error" role="alert" hidden></p>
     </section>
+    <p id="shared-speaking" class="shared-speaking" role="status" aria-live="polite" hidden></p>
     <main id="feed" aria-live="polite">
       <div class="welcome-state" id="welcome-state">
         <h1 data-i18n="welcome.title">Нажмите и говорите</h1>
@@ -84,9 +89,13 @@
       <div class="input-utility-row">
         <button id="scroll-to-bottom" class="theme-toggle" type="button" data-i18n-aria="chat.latest" aria-label="К последнему сообщению" aria-controls="feed" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v16M6 14l6 6 6-6"/></svg></button>
         <button id="trial-remaining" class="trial-remaining" type="button" aria-live="polite" hidden></button>
-        <button id="shared-room-menu" class="theme-toggle" type="button" data-i18n-aria="shared.controls" aria-label="Настройки беседы" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></button><div id="translator-preferences-slot"></div>
+        <button id="shared-room-menu" class="theme-toggle" type="button" data-i18n-aria="shared.controls" aria-label="Настройки беседы" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></button>
+        <button id="speech-settings-open" class="theme-toggle speech-settings-button" type="button" aria-haspopup="dialog" data-i18n="speech.settings">Голос</button>
+        <button id="notifications-open" class="theme-toggle" type="button" aria-haspopup="dialog" data-i18n-aria="notifications.settings" aria-label="Уведомления"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg></button>
+        <div id="translator-preferences-slot"></div>
       </div>
       <p id="live-transcript" class="live-transcript" aria-live="polite" hidden></p>
+      <button id="voice-cancel" class="voice-cancel-button" type="button" data-i18n="voice.cancel" hidden>Отменить запись</button>
       <div class="composer">
         <button id="mic-btn" class="mic-button" type="button" data-i18n-aria="voice.start" aria-label="Начать голосовой ввод" aria-pressed="false">
           <span class="mic-icon" aria-hidden="true"></span><span class="mic-label" data-i18n="voice.speak">Говорить</span>
@@ -100,6 +109,19 @@
       <div class="voice-guidance"><p id="voice-hint" data-i18n="voice.hint">Нажмите «Говорить». Когда кнопка станет красной, начинайте говорить.</p><button id="live-mode-btn" class="live-mode-button" type="button" aria-pressed="false" data-i18n-aria="live.toggle" aria-label="Включить живой разговор"><span class="live-dot" aria-hidden="true"></span><span data-i18n="live.label">Живой</span></button></div>
     </footer>
 
+    <dialog id="speech-settings-dialog" aria-labelledby="speech-settings-title">
+      <div class="dialog-content">
+        <div class="dialog-heading"><h2 id="speech-settings-title" data-i18n="speech.title">Голос и уведомления</h2><button id="speech-settings-close" class="icon-button" type="button" data-i18n-aria="dialog.close" aria-label="Закрыть">×</button></div>
+        <p data-i18n="speech.description">Выбранным голосом будут озвучиваться переводы. Настройка сохраняется в этом браузере.</p>
+        <label for="speech-voice" data-i18n="speech.voice">Выберите голос</label>
+        <select id="speech-voice" disabled></select>
+        <p id="speech-settings-error" class="error" role="alert" hidden></p>
+        <h3 data-i18n="notifications.settings">Уведомления</h3>
+        <p id="notifications-help" data-i18n="notifications.description">Новые сообщения общих бесед могут приходить на это устройство, даже когда вкладка закрыта.</p>
+        <button id="notifications-toggle" class="primary-button" type="button" aria-pressed="false" disabled data-i18n="notifications.enable">Включить уведомления</button>
+        <p id="notifications-status" role="status" aria-live="polite" data-i18n="notifications.loading">Проверяем поддержку…</p>
+      </div>
+    </dialog>
     <dialog id="language-dialog" aria-labelledby="language-dialog-title">
       <div class="dialog-content">
         <div class="dialog-heading"><div><h2 id="language-dialog-title" data-i18n="dialog.title">Выберите язык</h2><p class="dialog-context" id="language-dialog-role">Язык перевода</p></div><button id="language-dialog-close" class="icon-button" type="button" data-i18n-aria="dialog.close" aria-label="Закрыть">×</button></div>
@@ -133,9 +155,11 @@
   <script src="/js/localization.js"></script>
   <script src="/js/api.js"></script>
   <script src="/js/auth.js"></script>
+  <script src="/js/speech-settings.js"></script>
   <script src="/js/translator.js"></script>
   <script src="/js/voice.js"></script>
   <script src="/js/shared.js"></script>
+  <script src="/js/notifications.js"></script>
   <script src="/js/chat-scroll.js"></script>
 </body>
 </html>

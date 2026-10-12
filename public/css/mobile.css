@@ -1,0 +1,116 @@
+/* Keep every grid track inside the viewport, including long names and text. */
+#translator-screen {
+  width: min(100%, 640px);
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: calc(70px + env(safe-area-inset-top)) auto auto auto minmax(80px, 1fr) auto !important;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+}
+#pair-bar { padding-top: env(safe-area-inset-top) !important; }
+#translator-screen > *, #input-bar, #feed, .turn-result > *,
+.dialog-content, .dialog-heading > *, .shared-toolbar {
+  min-width: 0;
+}
+#feed { overflow-x: hidden; }
+.turn-card { flex-shrink: 0; }
+.turn-result .turn-text { flex: 1; min-width: 0; }
+.turn-meta { flex-wrap: wrap; gap: 4px 12px; }
+.turn-meta > *, .shared-sender, .error-card,
+.dialog-heading h2, .shared-setup h2, .shared-setup p {
+  overflow-wrap: anywhere;
+}
+.shared-speaking {
+  min-height: 44px;
+  max-height: 68px;
+  overflow-y: auto;
+  padding-block: 8px;
+}
+.live-transcript {
+  max-height: 64px;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  overscroll-behavior: contain;
+}
+.input-utility-row { flex-wrap: wrap; gap: 4px; }
+.input-utility-row > button { flex: 0 0 auto; }
+#translator-preferences-slot { margin-left: auto; }
+.input-utility-row .app-preferences { gap: 4px; }
+.input-utility-row .app-preferences select { width: 50px; }
+.speech-settings-button { min-width: 44px; padding-inline: 6px; }
+.voice-guidance { min-width: 0; }
+#voice-status { overflow-wrap: anywhere; }
+
+/* Dialogs scroll within the available height. The heading stays available. */
+dialog {
+  max-width: calc(100% - 24px);
+  max-height: calc(100dvh - 24px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.dialog-heading {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  align-items: flex-start;
+  padding-bottom: 8px;
+  background: var(--surface-raised);
+}
+.dialog-heading h2 { flex: 1; max-height: 4em; overflow-y: auto; overscroll-behavior: contain; }
+.shared-toolbar > #shared-status { flex: 1 1 100%; }
+.shared-link-row { flex-wrap: wrap; }
+.shared-link-row input { flex: 1 1 150px; width: 0; }
+.shared-link-row button { flex: 0 0 auto; }
+.shared-setup { min-height: 0; }
+.shared-setup-actions { flex-wrap: wrap; }
+.shared-setup-actions button { min-width: 0; overflow-wrap: anywhere; }
+.access-dialog-content { overflow-wrap: anywhere; }
+.access-dialog-content h2 { padding-inline: 16px; }
+#notifications-toggle { min-height: 44px; max-width: 100%; white-space: normal; }
+#notifications-status, #notifications-help { overflow-wrap: anywhere; }
+
+/* Safe centering falls back to the top when the registration form is tall. */
+#auth-screen { align-content: safe center; }
+#auth-form, .auth-brand { min-width: 0; }
+
+@media (max-width: 400px) {
+  #input-bar { padding-inline: max(10px, env(safe-area-inset-left)) max(10px, env(safe-area-inset-right)); }
+  #feed { padding-inline: 10px; }
+  .turn-card { padding: 12px; }
+  .turn-section.source { padding: 9px; }
+  .turn-result { flex-wrap: wrap; align-items: flex-start; gap: 8px; }
+  .turn-result .turn-text { flex-basis: 100%; }
+  .turn-result .turn-actions { margin-left: auto; }
+  .dialog-content { padding: 16px; }
+  .dialog-heading h2 { font-size: 19px; }
+}
+
+@media (max-width: 300px) {
+  #pair-bar { padding-inline: 8px !important; gap: 4px !important; }
+  .pair-language { padding-inline: 5px; }
+  .pair-language span { font-size: 11px; }
+  .input-utility-row { justify-content: flex-start !important; }
+  #translator-preferences-slot { flex-basis: 100%; }
+  #translator-preferences-slot .app-preferences { justify-content: flex-end; }
+  #language-list { grid-template-columns: minmax(0, 1fr); }
+  #voice-hint { max-width: calc(100% - 70px); }
+  .live-mode-button { padding-inline: 7px; }
+}
+
+/* On landscape phones and with a keyboard, the shell can scroll vertically
+   instead of hiding the feed or placing the composer outside the screen. */
+@media (max-height: 600px) {
+  #translator-screen { grid-template-rows: calc(58px + env(safe-area-inset-top)) auto auto auto minmax(96px, 1fr) auto !important; }
+  #input-bar { padding-block: 6px max(8px, env(safe-area-inset-bottom)); }
+  #voice-status { margin-bottom: 4px; }
+  .input-utility-row { margin-bottom: 4px; }
+  .shared-speaking { max-height: 52px; padding-block: 6px; }
+  .live-transcript { max-height: 48px; }
+  .voice-guidance { align-items: center; }
+  #voice-hint { margin-top: 4px; }
+  .shared-setup { max-height: 40dvh; }
+  #auth-screen { padding-top: max(68px, calc(env(safe-area-inset-top) + 58px)); gap: 18px; }
+  .auth-identity { margin-bottom: 14px; }
+  .auth-brand h1 { font-size: 25px; }
+}

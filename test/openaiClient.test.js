@@ -113,6 +113,53 @@ test('callOpenAI returns null when the model reply cannot be parsed', async () =
   }
 });
 
+test('group translation prompts specify one recipient language even on a strict retry', async () => {
+  const originalFetch = globalThis.fetch;
+  const originalKey = process.env.OPENAI_API_KEY;
+  process.env.OPENAI_API_KEY = 'test-key';
+  const requests = [];
+  globalThis.fetch = async (_url, options) => {
+    requests.push(JSON.parse(options.body));
+    return { ok: true, json: async () => ({ choices: [{ message: {
+      content: '{"detected_lang":"Русский","translation":"Hola","new_target_lang":null}',
+    } }] }) };
+  };
+  try {
+    for (const strict of [false, true]) {
+      await callOpenAI('Испанский', 'Привет', { sourceLanguage: 'Русский', fixedDirection: true, strict });
+    }
+    for (const request of requests) {
+      assert.match(request.messages[0].content, /язык отправителя: Русский/i);
+      assert.match(request.messages[0].content, /всегда на язык получателя: Испанский/i);
+      assert.doesNotMatch(request.messages[0].content, /другой язык (?:пары|выбранной пары)/i);
+      assert.deepEqual(request.messages.at(-1), { role: 'user', content: 'Привет' });
+    }
+    assert.match(requests[1].messages[0].content, /Повторная проверка/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = originalKey;
+  }
+});
+
+test('callOpenAI exposes only the provider HTTP status for retry classification', async () => {
+  const originalFetch = globalThis.fetch;
+  const originalKey = process.env.OPENAI_API_KEY;
+  process.env.OPENAI_API_KEY = 'test-key';
+  globalThis.fetch = async () => ({ ok: false, status: 429 });
+  try {
+    await assert.rejects(callOpenAI('Английский', 'Привет'), (error) => {
+      assert.equal(error.status, 429);
+      assert.equal(error.message, 'OpenAI request failed with status 429');
+      return true;
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = originalKey;
+  }
+});
+
 test('createSpeech requests OpenAI TTS and returns an audio buffer', async () => {
   const originalFetch = globalThis.fetch;
   process.env.OPENAI_API_KEY = 'test-key';
@@ -142,8 +189,8 @@ test('transcribeAudio posts an audio file to OpenAI and returns its text', async
   try {
     assert.equal(await transcribeAudio(Buffer.from([1, 2]), 'audio/webm', 'ru'), 'Привет');
     assert.equal(request.url, 'https://api.openai.com/v1/audio/transcriptions');
-    assert.equal(request.options.body.get('model'), 'gpt-4o-mini-transcribe');
-    assert.equal(request.options.body.get('language'), 'ru');
+    assert.equal(request.options.body.get('model'), 'gpt-transcribe');
+    assert.deepEqual(request.options.body.getAll('languages[]'), ['ru']);
   } finally { globalThis.fetch = originalFetch; }
 });
 
@@ -172,4 +219,72 @@ test('createRealtimeTranscriptionCall sends SDP and session as multipart text fi
     assert.equal(JSON.parse(request.options.body.get('session')).type, 'transcription');
     assert.match(request.options.headers['OpenAI-Safety-Identifier'], /^[a-f0-9]{64}$/);
   } finally { globalThis.fetch = originalFetch; }
+});
+
+test('default translation model uses GPT-6 Luna compatible parameters and legacy override remains supported', async t => {
+  const originalFetch = globalThis.fetch;
+  const originalEnv = { ...process.env };
+  t.after(() => { globalThis.fetch = originalFetch; process.env = originalEnv; });
+  process.env.OPENAI_API_KEY = 'test-key';
+  const requests = [];
+  globalThis.fetch = async (_url, options) => {
+    requests.push(JSON.parse(options.body));
+    return { ok: true, json: async () => ({ choices: [{ message: { content: '{"detected_lang":"Русский","translation":"Hello","new_target_lang":null}' } }] }) };
+  };
+  delete process.env.TRANSLATOR_MODEL;
+  await callOpenAI('Английский', 'Привет');
+  assert.equal(requests[0].model, 'gpt-6-luna');
+  assert.equal(requests[0].reasoning_effort, 'none');
+  assert.equal(requests[0].temperature, undefined);
+  process.env.TRANSLATOR_MODEL = 'gpt-4o-mini';
+  await callOpenAI('Английский', 'Привет');
+  assert.equal(requests[1].model, 'gpt-4o-mini');
+  assert.equal(requests[1].temperature, 0);
+  assert.equal(requests[1].reasoning_effort, undefined);
+  for (const model of ['gpt-6-astra', 'gpt-6.1-sol']) {
+    process.env.TRANSLATOR_MODEL = model;
+    await callOpenAI('Английский', 'Привет');
+    assert.equal(requests.at(-1).reasoning_effort, 'low');
+    assert.equal(requests.at(-1).temperature, undefined);
+  }
+});
+
+test('selected TTS voice reaches provider and invalid voices are rejected before fetch', async t => {
+  const originalFetch = globalThis.fetch;
+  const originalEnv = { ...process.env };
+  t.after(() => { globalThis.fetch = originalFetch; process.env = originalEnv; });
+  process.env.OPENAI_API_KEY = 'test-key';
+  process.env.TTS_VOICE = 'invalid-environment-value';
+  const requests = [];
+  globalThis.fetch = async (_url, options) => {
+    requests.push(JSON.parse(options.body));
+    return { ok: true, arrayBuffer: async () => new Uint8Array([1]).buffer };
+  };
+  await createSpeech('Hello', 'Английский', 'cedar');
+  assert.equal(requests[0].voice, 'cedar');
+  await createSpeech('Hello', 'Английский');
+  assert.equal(requests[1].voice, 'marin');
+  await assert.rejects(createSpeech('Hello', 'Английский', 'custom-invalid'));
+  assert.equal(requests.length, 2);
+});
+
+test('file transcription uses new model languages hint and preserves configured legacy language field', async t => {
+  const originalFetch = globalThis.fetch;
+  const originalEnv = { ...process.env };
+  t.after(() => { globalThis.fetch = originalFetch; process.env = originalEnv; });
+  process.env.OPENAI_API_KEY = 'test-key';
+  const requests = [];
+  globalThis.fetch = async (_url, options) => {
+    requests.push(options.body);
+    return { ok: true, json: async () => ({ text: 'Hello' }) };
+  };
+  delete process.env.TRANSCRIBE_MODEL;
+  await transcribeAudio(Buffer.from([1]), 'audio/webm', 'en');
+  assert.equal(requests[0].get('model'), 'gpt-transcribe');
+  assert.deepEqual(requests[0].getAll('languages[]'), ['en']);
+  assert.equal(requests[0].get('language'), null);
+  process.env.TRANSCRIBE_MODEL = 'gpt-4o-mini-transcribe';
+  await transcribeAudio(Buffer.from([1]), 'audio/webm', 'en');
+  assert.equal(requests[1].get('language'), 'en');
+  assert.deepEqual(requests[1].getAll('languages[]'), []);
 });

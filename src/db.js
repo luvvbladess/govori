@@ -79,6 +79,7 @@ function createDb(dbPath = DEFAULT_DB_PATH) {
       ALTER TABLE shared_members_group RENAME TO shared_members;`);
     })();
   }
+  if (!memberColumns.includes('left_at')) db.exec('ALTER TABLE shared_members ADD COLUMN left_at TEXT');
   db.exec(`CREATE INDEX IF NOT EXISTS idx_shared_members_user ON shared_members(user_key, room_id);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_shared_single_host ON shared_members(room_id) WHERE role='host';
     CREATE TABLE IF NOT EXISTS shared_translations (
@@ -87,6 +88,11 @@ function createDb(dbPath = DEFAULT_DB_PATH) {
     );
     INSERT OR IGNORE INTO shared_translations SELECT id,target_language,translation_text,'translated'
       FROM shared_messages WHERE status='translated' AND translation_text IS NOT NULL;`);
+  db.exec(`CREATE TABLE IF NOT EXISTS push_subscriptions (
+    endpoint TEXT PRIMARY KEY, user_key TEXT NOT NULL, p256dh TEXT NOT NULL, auth TEXT NOT NULL,
+    locale TEXT NOT NULL, expiration_time INTEGER, created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user ON push_subscriptions(user_key);`);
   return db;
 }
 

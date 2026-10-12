@@ -29,17 +29,19 @@ function mapModelResponse(sourceLanguage, targetLanguage, parsed) {
 }
 
 function createTranslator(openaiClient) {
-  async function attemptOnce(sourceLanguage, targetLanguage, text, strict) {
-    const parsed = await openaiClient.callOpenAI(targetLanguage, text, { strict, sourceLanguage });
+  async function attemptOnce(sourceLanguage, targetLanguage, text, strict, fixedDirection) {
+    const parsed = await openaiClient.callOpenAI(targetLanguage, text, { strict, sourceLanguage, fixedDirection });
     if (!parsed) return null;
-    const mapped = mapModelResponse(sourceLanguage, targetLanguage, parsed);
+    // Group participants already declare their language. Detection metadata
+    // must not reverse a recipient's translation of an ambiguous phrase.
+    const mapped = fixedDirection ? { sourceLanguage, targetLanguage } : mapModelResponse(sourceLanguage, targetLanguage, parsed);
     if (!mapped) return null;
     if (looksLikePromptLeak(parsed.translation)) return null;
     if (!matchesLanguageAlphabet(mapped.targetLanguage, parsed.translation)) return null;
     return { ...mapped, original: text, translation: parsed.translation };
   }
 
-  async function translateText(user, text) {
+  async function translateText(user, text, { fixedDirection = false } = {}) {
     const sourceLanguage = user.source_language || 'Русский';
     const targetLanguage = user.target_language || 'Английский';
 
@@ -48,8 +50,14 @@ function createTranslator(openaiClient) {
     let direction;
     try {
       for (const chunk of chunks) {
-        let result = await attemptOnce(sourceLanguage, targetLanguage, chunk, false);
-        if (!result) result = await attemptOnce(sourceLanguage, targetLanguage, chunk, true);
+        let result;
+        try {
+          result = await attemptOnce(sourceLanguage, targetLanguage, chunk, false, fixedDirection);
+        } catch (error) {
+          const transient = error instanceof TypeError || error.status === 429 || error.status >= 500 && error.status <= 599;
+          if (!fixedDirection || !transient) throw error;
+        }
+        if (!result) result = await attemptOnce(sourceLanguage, targetLanguage, chunk, true, fixedDirection);
         if (!result) throw new Error('TRANSLATION_FAILED');
         if (!direction) direction = { sourceLanguage: result.sourceLanguage, targetLanguage: result.targetLanguage };
         if (result.sourceLanguage !== direction.sourceLanguage || result.targetLanguage !== direction.targetLanguage) throw new Error('INCONSISTENT_LANGUAGE');
@@ -80,9 +88,9 @@ function createTranslator(openaiClient) {
 
   return {
     translateText,
-    createSpeech: async (text, language) => {
+    createSpeech: async (text, language, voice) => {
       const audioParts = [];
-      for (const chunk of splitText(text, 3500)) audioParts.push(await openaiClient.createSpeech(chunk, language));
+      for (const chunk of splitText(text, 3500)) audioParts.push(await openaiClient.createSpeech(chunk, language, voice));
       return Buffer.concat(audioParts);
     },
     transcribeAudio: (audio, mimeType, language) => openaiClient.transcribeAudio(audio, mimeType, language),

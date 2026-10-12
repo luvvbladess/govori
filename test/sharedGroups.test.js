@@ -99,8 +99,8 @@ test('migration keeps old two-person rooms and messages and removes the one-gues
     assert.equal(db.prepare("SELECT language FROM shared_members WHERE id='guest'").get().language,'Английский');
     assert.equal(db.prepare("SELECT title FROM shared_rooms WHERE id='old'").get().title,'Old conversation');
     assert.equal(db.prepare('SELECT text FROM shared_translations WHERE message_id=1').get().text,'Hello');
-    db.prepare('INSERT INTO shared_members VALUES (?,?,?,?,?,?,?)').run('third','old','guest:new','guest','Third','date','Испанский');
+    db.prepare('INSERT INTO shared_members (id,room_id,user_key,role,name,last_seen,language) VALUES (?,?,?,?,?,?,?)').run('third','old','guest:new','guest','Third','date','Испанский');
     assert.equal(db.prepare('SELECT COUNT(*) AS n FROM shared_members').get().n,3);
-    assert.throws(()=>db.prepare('INSERT INTO shared_members VALUES (?,?,?,?,?,?,?)').run('other-host','old','2','host','Other','date','Русский'));
+    assert.throws(()=>db.prepare('INSERT INTO shared_members (id,room_id,user_key,role,name,last_seen,language) VALUES (?,?,?,?,?,?,?)').run('other-host','old','2','host','Other','date','Русский'));
   } finally { db.close(); fs.rmSync(dir,{recursive:true,force:true}); }
 });

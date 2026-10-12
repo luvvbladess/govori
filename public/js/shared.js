@@ -5,7 +5,15 @@
   const rendered = new Map();
   const retries = new Map();
   let personalPair;
-  function busy() { return window.voiceInProgress?.() || window.translationBusy?.(); }
+  let leaveRequest = null;
+  let generation = 0;
+  let lastReceivedId = 0;
+  let localSpeaking = false;
+  let speakingTimer;
+  let speakingQueue = Promise.resolve();
+  let speakingRevision = 0;
+  let pendingSpeaking = null;
+  function busy() { return Boolean(leaveRequest) || window.voiceInProgress?.() || window.translationBusy?.(); }
   function say(key) { window.showVoiceStatus?.(window.t(key)); }
   function updateControls() {
     const toolbar = $('shared-toolbar');
@@ -20,6 +28,7 @@
     const label = $('target-language-btn').querySelector('span'); label.dataset.i18n = active && active.participants.length > 2 ? 'shared.audience' : 'pair.target'; label.textContent = window.t(label.dataset.i18n);
   }
   function showStatus(connected = true) {
+    renderSpeaking();
     if (!active) return;
     const others = active.participants.filter((member) => member.id !== active.memberId);
 
@@ -30,6 +39,43 @@
       $('target-language').textContent = languages.map((language) => window.displayLanguage?.(language) || language).join(', ');
     }
     if ($('shared-people-dialog').open) renderPeople();
+  }
+  function participantName(member) {
+    const named = !['1', '2'].includes(member.name) && member.name;
+    if (member.id === active.memberId) return named ? `${window.t('shared.you')} (${member.name})` : window.t('shared.you');
+    return named || window.t('shared.participant').replace('{number}', active.participants.findIndex(person => person.id === member.id) + 1);
+  }
+  function renderSpeaking() {
+    const speakers = active?.participants.filter((member) => member.speaking) || [];
+    const label = $('shared-speaking');
+    const text = speakers.length ? `${window.t(speakers.length === 1 ? 'shared.speakingNow' : 'shared.speakingMany')}: ${speakers.map(participantName).join(', ')}` : '';
+    if (label.textContent !== text) label.textContent = text;
+    label.hidden = speakers.length === 0;
+  }
+  function publishSpeaking(roomId, speaking) {
+    const revision = speakingRevision;
+    if (pendingSpeaking?.revision === revision) return pendingSpeaking.promise;
+    // Coalesce heartbeats and skip superseded updates behind a slow request.
+    speakingQueue = speakingQueue.then(() => {
+      if (speakingRevision === revision) return window.Api.sharedSpeaking(roomId, speaking);
+    }).catch((error) => {
+      if (active?.id === roomId && error.status !== 404) showStatus(false);
+    });
+    const pending = { revision, promise: speakingQueue };
+    pendingSpeaking = pending;
+    speakingQueue.finally(() => { if (pendingSpeaking === pending) pendingSpeaking = null; });
+    return pending.promise;
+  }
+  function setSpeaking(speaking) {
+    if (!active || localSpeaking === speaking) return;
+    speakingRevision++;
+    localSpeaking = speaking;
+    window.clearInterval(speakingTimer);
+    const roomId = active.id;
+    active = { ...active, participants: active.participants.map((member) => member.id === active.memberId ? { ...member, speaking } : member) };
+    showStatus();
+    if (speaking) speakingTimer = window.setInterval(() => publishSpeaking(roomId, true), 2000);
+    return publishSpeaking(roomId, speaking);
   }
   function renderMessage(message, animate = true) {
     const existing = rendered.get(message.id);
@@ -42,7 +88,8 @@
     const language = active.sourceLanguage;
     const translated = message.translations?.[language];
     const viewerFailed = !own && message.sourceLanguage !== language && translated?.status === 'failed';
-    if (message.status === 'translated' && !viewerFailed) {
+    const viewerPending = !own && message.sourceLanguage !== language && !['translated', 'failed'].includes(translated?.status);
+    if (message.status === 'translated' && !viewerFailed && !viewerPending) {
       const sameLanguage = !own && message.sourceLanguage === language;
       const targetLanguage = own ? message.targetLanguage : language;
       const translationText = sameLanguage ? message.sourceText : !own && translated?.status === 'translated' ? translated.text : message.translationText;
@@ -64,7 +111,7 @@
     const identity = document.createElement('span'); identity.dataset.i18n = own ? 'shared.you' : 'shared.them'; identity.textContent = window.t(identity.dataset.i18n); sender.append(identity); const senderDetail = document.createElement('span'); senderDetail.textContent = `${!['1', '2'].includes(message.senderName) ? ` · ${message.senderName}` : ''} · ${new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`; sender.append(senderDetail);
     card.prepend(sender); card.classList.toggle('shared-own', own);
     if (existing) { existing.card.replaceWith(card); }
-    rendered.set(message.id, { card, status: message.status, signature });
+    rendered.set(message.id, { card, status: viewerPending && message.status === 'translated' ? 'pending' : message.status, signature });
     if (!animate || existing) card.classList.add('is-restored');
     const nextId = [...rendered.keys()].filter((id) => id > message.id).sort((a, b) => a - b)[0];
     if (nextId) feed.insertBefore(card, rendered.get(nextId).card);
@@ -72,18 +119,26 @@
   }
   async function refresh() {
     if (!active || pollBusy) return;
-    pollBusy = true; const roomId = active.id;
+    pollBusy = true; const roomId = active.id; const pollGeneration = generation;
     try {
-      const after = historyLoaded ? [...rendered.keys()].reduce((max, id) => Math.max(max, id), 0) : 0;
-      const pending = [...rendered.entries()].filter(([, entry]) => entry.status === 'pending').map(([id]) => id);
+      const after = lastReceivedId;
+      const pending = [...rendered.entries()].filter(([, entry]) => entry.status === 'pending').map(([id]) => id).slice(0, 100);
       const data = await window.Api.sharedRoom(roomId, { after, pending });
-      if (active?.id !== roomId) return;
-      active = data.room; updateControls(); showStatus(); data.messages.forEach((message) => renderMessage(message, historyLoaded)); historyLoaded = true;
-    } catch (error) { if (active?.id === roomId) showStatus(false); }
-    finally { pollBusy = false; }
+      if (active?.id !== roomId || generation !== pollGeneration) return;
+      active = localSpeaking ? { ...data.room, participants: data.room.participants.map((member) => member.id === data.room.memberId ? { ...member, speaking: true } : member) } : data.room;
+      updateControls(); showStatus(); data.messages.forEach((message) => renderMessage(message, historyLoaded));
+      lastReceivedId = data.messages.reduce((max, message) => Math.max(max, message.id), lastReceivedId);
+      historyLoaded = true;
+    } catch (error) {
+      if (active?.id !== roomId || generation !== pollGeneration) return;
+      if (error.status === 404) { deactivate(); say('error.roomNotFound'); }
+      else showStatus(false);
+    }
+    finally { if (generation === pollGeneration) pollBusy = false; }
   }
   function activate(room) {
     if (!active) personalPair = { source: window.getSourceLanguage?.(), target: window.getTargetLanguage?.() };
+    generation++; pollBusy = false; lastReceivedId = 0;
     active = room; historyLoaded = false; rendered.clear(); feed.replaceChildren(); setup.hidden = true;
     const welcome = document.createElement('p'); welcome.id = 'welcome-state'; welcome.className = 'welcome-state'; welcome.textContent = window.t('shared.empty'); welcome.dataset.i18n = 'shared.empty'; feed.append(welcome);
     window.setSharedPair(room.sourceLanguage, room.targetLanguage); updateControls(); showStatus();
@@ -92,13 +147,30 @@
     window.clearInterval(timer); timer = window.setInterval(refresh, 1500); refresh();
     say(room.role === 'host' && room.participants.length === 1 ? 'shared.created' : 'voice.ready');
   }
-  function leave() {
+  function deactivate() {
     if (!active) return;
+    if (localSpeaking) setSpeaking(false);
+    window.cancelVoiceInput?.();
+    window.clearInterval(speakingTimer);
     window.stopSpeech?.();
-    window.clearInterval(timer); active = null; rendered.clear(); updateControls();
+    generation++; pollBusy = false;
+    window.clearInterval(timer); active = null; rendered.clear(); retries.clear(); updateControls();
     history.replaceState(null, '', location.pathname); localStorage.removeItem('shared-room');
-    feed.replaceChildren(); say('voice.ready');
+    feed.replaceChildren(); renderSpeaking(); say('voice.ready');
     if (personalPair?.source && personalPair?.target) window.setSharedPair(personalPair.source, personalPair.target);
+  }
+  async function leave() {
+    if (leaveRequest) return leaveRequest;
+    if (!active) return;
+    const roomId = active.id;
+    $('shared-leave').disabled = true;
+    leaveRequest = (async () => {
+      try { await window.Api.sharedLeave(roomId); }
+      catch (error) { if (error.status !== 404) throw error; }
+      if (active?.id === roomId) deactivate();
+    })();
+    try { await leaveRequest; }
+    finally { leaveRequest = null; $('shared-leave').disabled = false; }
   }
   async function send(text, requestId) {
     const roomId = active.id;
@@ -135,7 +207,7 @@
   $('shared-create').addEventListener('click', () => {
     if (busy()) { say('shared.finishRecording'); return; }
     if (!window.accessState?.authenticated) { window.showAuth?.('register'); return; }
-    leave(); invitation = null; showSetup(false);
+    deactivate(); invitation = null; showSetup(false);
   });
   $('shared-cancel').addEventListener('click', () => { setup.hidden = true; invitation = null; history.replaceState(null, '', location.pathname); });
   $('shared-start').addEventListener('click', async () => {
@@ -164,7 +236,11 @@
       else window.prompt(window.t('shared.invite'), url);
     } catch (error) { if (error.name !== 'AbortError') window.prompt(window.t('shared.invite'), url); }
   });
-  $('shared-leave').addEventListener('click', () => { if (busy()) { say('shared.finishRecording'); return; } leave(); $('new-conversation-btn').click(); });
+  $('shared-leave').addEventListener('click', async () => {
+    if (busy()) { say('shared.finishRecording'); return; }
+    try { await leave(); $('new-conversation-btn').click(); }
+    catch (error) { window.showVoiceStatus?.(window.errorMessage(error), true); }
+  });
   async function appendHistory(list) {
     const data = await window.Api.sharedRooms();
     data.rooms.slice().reverse().forEach((room) => {
@@ -183,9 +259,10 @@
     $('shared-people-title').textContent = active.title || window.t('shared.people');
     $('shared-people-list').replaceChildren(...active.participants.map((member) => {
       const item = document.createElement('li');
-      const name = member.id === active.memberId ? window.t('shared.you') : !['1','2'].includes(member.name) ? member.name : window.t('shared.them');
+      const name = participantName(member);
       const online = Date.now() - Date.parse(member.lastSeen) < 15000;
-      item.textContent = `${name} · ${window.displayLanguage?.(member.language) || member.language} · ${window.t(online ? 'shared.onlineCount' : 'shared.offline').replace('{count}', 1)}`;
+      item.classList.toggle('is-speaking', Boolean(member.speaking));
+      item.textContent = `${name} · ${window.displayLanguage?.(member.language) || member.language} · ${window.t(member.speaking ? 'shared.speaking' : online ? 'shared.onlineCount' : 'shared.offline').replace('{count}', 1)}`;
       return item;
     }));
   }
@@ -195,10 +272,10 @@
   $('shared-status').addEventListener('click', () => { renderPeople(); $('shared-people-dialog').showModal(); });
   $('shared-people-close').addEventListener('click', () => $('shared-people-dialog').close());
   $('new-shared-btn').addEventListener('click', () => { if (busy()) { say('shared.finishRecording'); return; } $('history-dialog').close(); $('shared-create').click(); });
-  window.SharedConversation = { get active() { return active; }, send, leave, appendHistory };
+  window.SharedConversation = { get active() { return active; }, get leaving() { return Boolean(leaveRequest); }, send, leave, deactivate, appendHistory, setSpeaking };
   async function restore() {
     const params = new URLSearchParams(location.hash.slice(1));
-    if (params.has('invite')) { if (busy()) { say('shared.finishRecording'); return; } leave(); invitation = params.get('invite'); await showSetup(true); return; }
+    if (params.has('invite')) { if (busy()) { say('shared.finishRecording'); return; } deactivate(); invitation = params.get('invite'); await showSetup(true); return; }
     if (active && (!params.get('room') || params.get('room') === active.id)) { updateControls(); return; }
     if (active && busy()) { say('shared.finishRecording'); return; }
     const roomId = params.get('room') || localStorage.getItem('shared-room');

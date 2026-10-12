@@ -9,13 +9,15 @@ const { createAuthRouter, requireAccess } = require('./auth');
 const { createTranslatorRouter } = require('./translatorRoutes');
 const { createTranslator } = require('./translator');
 const { createSharedRouter } = require('./sharedRoutes');
+const { createPushRouter } = require('./pushRoutes');
+const { DISABLED_PUSH_SERVICE } = require('./pushNotifications');
 
-function createApp({ db, openaiClient }) {
+function createApp({ db, openaiClient, pushService = DISABLED_PUSH_SERVICE }) {
   const app = express();
   if (process.env.TRUST_PROXY === '1') app.set('trust proxy', 1);
   const SQLiteStore = SQLiteStoreFactory(session);
 
-  // connect-sqlite3@0.9.17 (the version installed here) takes an already-opened
+  // connect-sqlite3 takes an already-opened
   // sqlite3 connection as `db`, not a filename/dir pair — see node_modules/connect-sqlite3/Readme.md.
   const dataDir = path.join(__dirname, '..', 'data');
   fs.mkdirSync(dataDir, { recursive: true });
@@ -44,7 +46,8 @@ function createApp({ db, openaiClient }) {
 
   const translator = createTranslator(openaiClient);
   app.use('/api/translator', requireAccess(db), createTranslatorRouter(db, translator));
-  app.use('/api/shared', requireAccess(db), createSharedRouter(db, translator));
+  app.use('/api/shared', requireAccess(db), createSharedRouter(db, translator, { publishNewMessage: message => pushService.publishNewMessage(message) }));
+  app.use('/api/push', requireAccess(db), createPushRouter(db, pushService));
 
   app.use(express.static(path.join(__dirname, '..', 'public')));
 

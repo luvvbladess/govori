@@ -8,9 +8,9 @@
 .shared-setup-actions { display:flex; gap:8px; margin-top:12px; }.shared-setup-actions .primary-button { flex:1; }
 #shared-setup-error { color:var(--danger); }.shared-sender { margin:0 0 12px; color:var(--ink); font-size:13px; font-weight:650; }
 .shared-own { border-color:var(--primary); }.shared-message-state { color:var(--muted); font-size:14px; }
-#translator-screen { grid-template-rows:70px auto auto minmax(0,1fr) auto!important; }
+#translator-screen { grid-template-rows:70px auto auto auto minmax(0,1fr) auto!important; }
 #translator-screen > [hidden] { display:none!important; }
-#feed { grid-row:4; }#input-bar { grid-row:5; }
+#shared-speaking { grid-row:4; }#feed { grid-row:5; }#input-bar { grid-row:6; }
 .shared-toolbar button:disabled { opacity:.6; cursor:default; }
 #shared-link-panel { flex-basis:100%; padding:4px 0 8px; min-width:0; }
 #shared-link-panel[hidden] { display:none; }
@@ -41,3 +41,14 @@ body:not(.is-authenticated) .chat-font-button { display:none; }
 #chat-font-size { width:100%; min-height:44px; padding:10px; border:1px solid var(--line); border-radius:10px; background:var(--surface); color:var(--ink); font:inherit; }
 .chat-font-preview { font-size:var(--chat-font-size,18px); line-height:1.5; }
 .turn-text,.turn-result .turn-text { font-size:var(--chat-font-size,18px); line-height:1.5; }
+.shared-speaking { margin:0; padding:10px 16px; background:var(--primary-soft); color:var(--primary-strong); font-size:14px; font-weight:650; text-align:center; overflow-wrap:anywhere; }
+.shared-speaking[hidden] { display:none; }
+.shared-people-list .is-speaking { color:var(--primary-strong); font-weight:650; }
+.voice-cancel-button { display:block; width:100%; min-height:44px; margin:0 0 8px; border:1px solid var(--line); border-radius:10px; background:var(--surface); color:var(--danger); font:inherit; font-size:14px; cursor:pointer; }
+.voice-cancel-button[hidden] { display:none; }
+.speech-settings-button { width:auto; padding-inline:10px; font-size:13px; }
+#speech-settings-dialog { width:min(100% - 28px,440px); max-height:80dvh; padding:0; border:0; border-radius:16px; background:var(--surface-raised); color:var(--ink); }
+#speech-settings-dialog::backdrop { background:rgba(9,16,28,.48); }
+#speech-settings-dialog p { font-size:14px; line-height:1.5; }
+#speech-settings-dialog label { display:block; margin:16px 0 8px; font-size:14px; }
+#speech-voice { width:100%; min-height:44px; padding:10px; border:1px solid var(--line); border-radius:10px; background:var(--surface); color:var(--ink); font:inherit; }
