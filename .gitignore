@@ -1,3 +1,14 @@
 node_modules/
 data/
 .env
+.env.*
+!.env.example
+serv.txt
+server.log
+server-error.log
+*.log
+.impeccable/
+.superpowers/
+coverage/
+test-results/
+playwright-report/

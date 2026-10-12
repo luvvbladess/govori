@@ -3,45 +3,139 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Переводчик</title>
+  <meta name="theme-color" content="#f6f8fb">
+  <title>Говори</title>
   <link rel="stylesheet" href="/css/app.css">
+  <link rel="stylesheet" href="/css/guest-access.css">
+  <link rel="stylesheet" href="/css/shared.css">
 </head>
 <body>
+  <div class="app-preferences" data-i18n-aria="settings.interface" aria-label="Настройки интерфейса">
+    <label class="sr-only" for="ui-language" data-i18n="settings.language">Язык интерфейса</label>
+    <select id="ui-language" data-i18n-aria="settings.language" aria-label="Язык интерфейса">
+      <option value="ru">RU</option><option value="en">EN</option><option value="zh">中文</option>
+    </select>
+    <button id="chat-font-open" class="theme-toggle chat-font-button" type="button" data-i18n-aria="settings.chatFont" aria-label="Размер текста чата">Аа</button>
+      <button id="theme-toggle" type="button" class="theme-toggle" aria-label="Включить тёмную тему"><span aria-hidden="true">◐</span></button>
+  </div>
   <section id="auth-screen">
-    <h1>Переводчик</h1>
-    <form id="auth-form">
-      <input type="email" id="auth-email" placeholder="Email" required autocomplete="email">
-      <input type="password" id="auth-password" placeholder="Пароль" required autocomplete="current-password" minlength="8">
-      <button type="submit" id="auth-submit">Войти</button>
-      <button type="button" id="auth-toggle-mode">Нет аккаунта? Зарегистрироваться</button>
-      <p id="auth-error" class="error" hidden></p>
+    <div class="auth-brand">
+      <div class="auth-identity"><span class="brand-mark" aria-hidden="true"></span><strong data-i18n="brand">Говори</strong></div>
+      <h1 data-i18n="auth.heading">Понимать друг друга<br>стало проще.</h1>
+      <p class="auth-subtitle" data-i18n="auth.subtitle">Ваш спокойный голосовой переводчик для живого разговора.</p>
+    </div>
+    <form id="auth-form" novalidate>
+      <label class="sr-only" for="auth-email">Email</label>
+      <input type="email" id="auth-email" placeholder="Email" required autocomplete="email" inputmode="email">
+      <div id="company-field" hidden>
+        <label class="sr-only" for="auth-company" data-i18n="auth.companyLabel">Компания</label>
+        <input type="text" id="auth-company" data-i18n-placeholder="auth.companyPlaceholder" placeholder="Ваша компания" autocomplete="organization" maxlength="160" required>
+      </div>
+      <div class="password-field">
+        <label class="sr-only" for="auth-password" data-i18n="auth.password">Пароль</label>
+      <input type="password" id="auth-password" data-i18n-placeholder="auth.password" placeholder="Пароль" required autocomplete="current-password" minlength="8">
+        <button type="button" id="auth-password-toggle" class="password-toggle" data-i18n-aria="auth.showPassword" aria-label="Показать пароль"><span aria-hidden="true">◉</span></button>
+      </div>
+      <button type="submit" id="auth-submit" class="primary-button" data-i18n="auth.signIn">Войти</button>
+      <button type="button" id="auth-toggle-mode" class="text-button" data-i18n="auth.switchToRegister">Нет аккаунта? Создать</button>
+      <button type="button" id="auth-back-to-app" class="text-button auth-back" data-i18n="trial.back" hidden>Вернуться к переводчику</button>
+      <p id="auth-error" class="error" role="alert" hidden></p>
+      <p id="auth-privacy" class="auth-privacy" data-i18n="auth.privacy" hidden>Данные аккаунта и история переводов хранятся на сервере приложения. Голос и текст передаются OpenAI для распознавания, перевода и озвучивания. Не указывайте коммерческие тайны.</p>
     </form>
   </section>
 
   <section id="translator-screen" hidden>
     <header id="pair-bar">
-      <span id="pair-indicator">Язык собеседника не задан</span>
-      <button id="change-language-btn">Сменить язык</button>
+      <div class="brand-lockup"><span class="brand-mark" aria-hidden="true"></span><strong data-i18n="brand">Говори</strong><button id="history-btn" class="history-btn" type="button" aria-label="История диалогов"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M5 12h14M5 17h14"/></svg></button></div>
+      <div class="pair-picker" data-i18n-aria="pair.languages" aria-label="Языки перевода">
+        <button id="source-language-btn" class="pair-language" type="button" aria-haspopup="dialog"><span data-i18n="pair.source">Я говорю</span><strong id="source-language">Русский</strong></button>
+        <button id="swap-languages-btn" class="swap-languages" type="button" data-i18n-aria="pair.swap" aria-label="Поменять языки местами"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h16m-4-4 4 4-4 4M20 16H4m4-4-4 4 4 4"/></svg></button>
+        <button id="target-language-btn" class="pair-language" type="button" aria-haspopup="dialog"><span data-i18n="pair.target">Собеседник</span><strong id="target-language">Английский</strong></button>
+      </div>
     </header>
-
-    <main id="feed"></main>
-
-    <dialog id="language-dialog">
-      <h2>Выберите язык собеседника</h2>
-      <ul id="language-list"></ul>
-      <button id="language-dialog-close">Закрыть</button>
-    </dialog>
-
+    <div id="shared-toolbar" class="shared-toolbar">
+      <button id="shared-create" type="button" data-i18n="shared.create">Общая беседа</button>
+      <button id="shared-status" type="button" aria-haspopup="dialog" hidden></button>
+      <button id="shared-invite" type="button" data-i18n="shared.invite" hidden>Пригласить</button>
+      <button id="shared-leave" type="button" data-i18n="shared.leave" hidden>Выйти</button>
+      <div id="shared-link-panel" hidden>
+        <label for="shared-link" data-i18n="shared.link">Ссылка для собеседника</label>
+        <div class="shared-link-row"><input id="shared-link" type="url" readonly><button id="shared-copy" type="button" data-i18n="shared.copy">Копировать</button></div>
+      </div>
+    </div>
+    <section id="shared-setup" class="shared-setup" hidden aria-labelledby="shared-setup-title">
+      <h2 id="shared-setup-title" data-i18n="shared.title">Разговор на расстоянии</h2>
+      <p id="shared-setup-body" data-i18n="shared.body">Выберите языки выше. Отправьте ссылку собеседнику — вы оба увидите реплики и переводы в одной беседе.</p>
+      <div id="shared-title-field"><label for="shared-room-title" data-i18n="shared.roomTitle">Название беседы</label><input id="shared-room-title" maxlength="100" data-i18n-placeholder="shared.roomTitlePlaceholder" placeholder="Например, друзья или поездка"></div>
+      <label for="shared-name" data-i18n="shared.name">Ваше имя</label>
+      <input id="shared-name" maxlength="60" autocomplete="nickname">
+      <label for="shared-language" data-i18n="shared.myLanguage">Мой язык</label><select id="shared-language"></select>
+      <div class="shared-setup-actions"><button id="shared-start" class="primary-button" type="button" data-i18n="shared.start">Создать беседу</button><button id="shared-cancel" type="button" data-i18n="shared.cancel">Отмена</button></div>
+      <p id="shared-setup-error" role="alert" hidden></p>
+    </section>
+    <main id="feed" aria-live="polite">
+      <div class="welcome-state" id="welcome-state">
+        <h1 data-i18n="welcome.title">Нажмите и говорите</h1>
+        <p data-i18n="welcome.body">Я сам определю язык и переведу реплику в нужную сторону.</p>
+      </div>
+    </main>
     <footer id="input-bar">
-      <button id="mic-btn" type="button" aria-label="Голосовой ввод">🎤</button>
-      <input id="text-input" type="text" placeholder="Введите сообщение" autocomplete="off">
-      <button id="send-btn" type="button" aria-label="Отправить">➤</button>
+      <div id="voice-status" role="status" aria-live="polite" data-i18n="voice.ready">Готов слушать</div>
+      <div class="input-utility-row">
+        <button id="scroll-to-bottom" class="theme-toggle" type="button" data-i18n-aria="chat.latest" aria-label="К последнему сообщению" aria-controls="feed" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v16M6 14l6 6 6-6"/></svg></button>
+        <button id="trial-remaining" class="trial-remaining" type="button" aria-live="polite" hidden></button>
+        <button id="shared-room-menu" class="theme-toggle" type="button" data-i18n-aria="shared.controls" aria-label="Настройки беседы" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></button><div id="translator-preferences-slot"></div>
+      </div>
+      <p id="live-transcript" class="live-transcript" aria-live="polite" hidden></p>
+      <div class="composer">
+        <button id="mic-btn" class="mic-button" type="button" data-i18n-aria="voice.start" aria-label="Начать голосовой ввод" aria-pressed="false">
+          <span class="mic-icon" aria-hidden="true"></span><span class="mic-label" data-i18n="voice.speak">Говорить</span>
+        </button>
+        <div class="text-composer">
+          <label class="sr-only" for="text-input" data-i18n="input.label">Фраза для перевода</label>
+          <input id="text-input" type="text" data-i18n-placeholder="input.placeholder" placeholder="Или напишите фразу" autocomplete="off" enterkeyhint="send">
+          <button id="send-btn" type="button" data-i18n-aria="input.translate" aria-label="Перевести" disabled>↑</button>
+        </div>
+      </div>
+      <div class="voice-guidance"><p id="voice-hint" data-i18n="voice.hint">Нажмите «Говорить». Когда кнопка станет красной, начинайте говорить.</p><button id="live-mode-btn" class="live-mode-button" type="button" aria-pressed="false" data-i18n-aria="live.toggle" aria-label="Включить живой разговор"><span class="live-dot" aria-hidden="true"></span><span data-i18n="live.label">Живой</span></button></div>
     </footer>
-  </section>
 
+    <dialog id="language-dialog" aria-labelledby="language-dialog-title">
+      <div class="dialog-content">
+        <div class="dialog-heading"><div><h2 id="language-dialog-title" data-i18n="dialog.title">Выберите язык</h2><p class="dialog-context" id="language-dialog-role">Язык перевода</p></div><button id="language-dialog-close" class="icon-button" type="button" data-i18n-aria="dialog.close" aria-label="Закрыть">×</button></div>
+        <ul id="language-list"></ul>
+      </div>
+    </dialog>
+    <dialog id="history-dialog" aria-labelledby="history-title">
+      <div class="dialog-content"><div class="dialog-heading"><div><h2 id="history-title" data-i18n="history.title">История разговоров</h2></div><button id="history-close" class="icon-button" type="button" data-i18n-aria="dialog.close" aria-label="Закрыть">×</button></div><button id="new-conversation-btn" class="new-conversation-btn" type="button" data-i18n="history.new">Новый разговор</button><button id="new-shared-btn" class="new-conversation-btn secondary-button" type="button" data-i18n="shared.new">Новая общая беседа</button><ul id="conversation-list" class="conversation-list"></ul><div id="history-interface-slot" class="history-interface-slot"></div></div>
+    </dialog>
+    <dialog id="chat-font-dialog" aria-labelledby="chat-font-title"><div class="dialog-content"><div class="dialog-heading"><h2 id="chat-font-title" data-i18n="settings.chatFont">Размер текста чата</h2><button id="chat-font-close" class="icon-button" type="button" data-i18n-aria="dialog.close" aria-label="Закрыть">×</button></div><label for="chat-font-size" data-i18n="settings.chatFont">Размер текста чата</label><select id="chat-font-size"><option value="16" data-i18n="settings.fontSmall">Мелкий</option><option value="18" data-i18n="settings.fontNormal">Обычный</option><option value="20" data-i18n="settings.fontLarge">Крупный</option><option value="24" data-i18n="settings.fontLargest">Очень крупный</option></select><p class="chat-font-preview" data-i18n="settings.fontPreview">Так будут выглядеть сообщения и переводы.</p></div></dialog>
+    <dialog id="shared-room-dialog" aria-labelledby="shared-room-dialog-title"><div class="dialog-content"><div class="dialog-heading"><h2 id="shared-room-dialog-title" data-i18n="shared.controls">Настройки беседы</h2><button id="shared-room-close" class="icon-button" type="button" data-i18n-aria="dialog.close" aria-label="Закрыть">×</button></div><div id="shared-room-actions"></div></div></dialog>
+    <dialog id="shared-people-dialog" aria-labelledby="shared-people-title"><div class="dialog-content"><div class="dialog-heading"><h2 id="shared-people-title" data-i18n="shared.people">Участники</h2><button id="shared-people-close" class="icon-button" type="button" data-i18n-aria="dialog.close" aria-label="Закрыть">×</button></div><ul id="shared-people-list" class="shared-people-list"></ul></div></dialog>
+    <dialog id="guest-menu-dialog" class="access-dialog" aria-labelledby="guest-menu-title">
+      <div class="access-dialog-content">
+        <button id="guest-menu-close" class="access-close" type="button" data-i18n-aria="dialog.close" aria-label="Закрыть">×</button>
+        <h2 id="guest-menu-title" data-i18n="trial.menuTitle">Гостевой доступ</h2>
+        <p id="guest-menu-status"></p>
+        <button id="guest-menu-register" class="primary-button" type="button" data-i18n="trial.create">Создать аккаунт</button>
+        <button id="guest-menu-login" class="access-secondary" type="button" data-i18n="trial.signIn">Уже есть аккаунт? Войти</button>
+      </div>
+    </dialog>
+    <dialog id="trial-limit-dialog" class="access-dialog" aria-labelledby="trial-limit-title">
+      <div class="access-dialog-content trial-complete">
+        <h2 id="trial-limit-title" data-i18n="trial.title">Пробный перевод завершён</h2>
+        <p data-i18n="trial.body">Создайте аккаунт, чтобы продолжить разговор и сохранить историю переводов.</p>
+        <button id="trial-limit-register" class="primary-button" type="button" data-i18n="trial.create">Создать аккаунт</button>
+        <button id="trial-limit-login" class="access-secondary" type="button" data-i18n="trial.signIn">Уже есть аккаунт? Войти</button>
+      </div>
+    </dialog>
+  </section>
+  <script src="/js/localization.js"></script>
   <script src="/js/api.js"></script>
   <script src="/js/auth.js"></script>
   <script src="/js/translator.js"></script>
   <script src="/js/voice.js"></script>
+  <script src="/js/shared.js"></script>
+  <script src="/js/chat-scroll.js"></script>
 </body>
 </html>

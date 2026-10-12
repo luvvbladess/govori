@@ -1,0 +1,43 @@
+.shared-toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:8px 16px; border-bottom:1px solid var(--line); background:var(--surface); }
+.shared-toolbar button,.shared-setup-actions button:not(.primary-button),.shared-message-state + button { min-height:44px; padding:8px 12px; border:1px solid var(--line); border-radius:10px; background:var(--surface); color:var(--primary-strong); font:inherit; font-size:14px; cursor:pointer; }
+.shared-toolbar button:hover { background:var(--primary-soft); }
+#shared-status { flex:1 1 0; min-width:0; line-height:1.3; color:var(--ink); font-size:13px; }
+.shared-setup { padding:16px; border-bottom:1px solid var(--line); background:var(--surface); overflow:auto; max-height:50dvh; }
+.shared-setup h2 { margin:0; font-size:20px; }.shared-setup p { font-size:14px; line-height:1.5; max-width:65ch; }
+.shared-setup label { display:block; margin:12px 0 6px; font-size:14px; }.shared-setup input { width:100%; min-height:44px; padding:10px; color:var(--ink); background:var(--canvas); border:1px solid var(--line); border-radius:10px; font:inherit; }
+.shared-setup-actions { display:flex; gap:8px; margin-top:12px; }.shared-setup-actions .primary-button { flex:1; }
+#shared-setup-error { color:var(--danger); }.shared-sender { margin:0 0 12px; color:var(--ink); font-size:13px; font-weight:650; }
+.shared-own { border-color:var(--primary); }.shared-message-state { color:var(--muted); font-size:14px; }
+#translator-screen { grid-template-rows:70px auto auto minmax(0,1fr) auto!important; }
+#translator-screen > [hidden] { display:none!important; }
+#feed { grid-row:4; }#input-bar { grid-row:5; }
+.shared-toolbar button:disabled { opacity:.6; cursor:default; }
+#shared-link-panel { flex-basis:100%; padding:4px 0 8px; min-width:0; }
+#shared-link-panel[hidden] { display:none; }
+#shared-link-panel label { display:block; margin-bottom:6px; font-size:13px; }
+.shared-link-row { display:flex; gap:8px; }.shared-link-row input { flex:1; min-width:0; min-height:44px; padding:8px; border:1px solid var(--line); border-radius:10px; font:inherit; font-size:14px; background:var(--canvas); color:var(--ink); }
+
+.shared-toolbar > button { flex:0 0 auto; }
+
+.shared-setup select { width:100%; min-height:44px; padding:10px; border:1px solid var(--line); border-radius:10px; background:var(--canvas); color:var(--ink); font:inherit; }
+#shared-status { text-align:left; padding-inline:0; border:0; border-radius:0; overflow-wrap:anywhere; font-size:13px; }
+#shared-people-dialog { width:min(100% - 28px,440px); max-height:80dvh; padding:0; border:0; border-radius:16px; background:var(--surface-raised); color:var(--ink); }
+#shared-people-dialog::backdrop { background:rgba(9,16,28,.48); }
+.shared-people-list { list-style:none; padding:0; margin:16px 0 0; }
+.shared-people-list li { padding:12px 0; border-bottom:1px solid var(--line); font-size:14px; line-height:1.5; overflow-wrap:anywhere; }
+.shared-people-list li:last-child { border-bottom:0; }
+.secondary-button { margin-top:8px; background:var(--surface)!important; border:1px solid var(--line)!important; color:var(--primary-strong)!important; }
+.shared-room-meta { display:block; margin-top:6px; color:var(--muted); font-size:12px; font-weight:500; }
+
+#shared-status { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; }
+.conversation-open { overflow-wrap:anywhere; }
+
+#shared-room-dialog,#chat-font-dialog { width:min(100% - 28px,440px); max-height:80dvh; padding:0; border:0; border-radius:16px; background:var(--surface-raised); color:var(--ink); }
+#shared-room-dialog::backdrop,#chat-font-dialog::backdrop { background:rgba(9,16,28,.48); }
+#shared-room-actions .shared-toolbar { padding:16px 0 0; border:0; }
+#shared-room-menu { margin-right:auto; color:var(--primary-strong); }
+body:not(.is-authenticated) .chat-font-button { display:none; }
+#chat-font-dialog label { display:block; margin:20px 0 8px; font-size:14px; }
+#chat-font-size { width:100%; min-height:44px; padding:10px; border:1px solid var(--line); border-radius:10px; background:var(--surface); color:var(--ink); font:inherit; }
+.chat-font-preview { font-size:var(--chat-font-size,18px); line-height:1.5; }
+.turn-text,.turn-result .turn-text { font-size:var(--chat-font-size,18px); line-height:1.5; }

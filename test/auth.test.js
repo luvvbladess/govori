@@ -22,6 +22,10 @@ function startServer(app) {
 }
 
 async function fetchWithCookies(baseUrl, path, options = {}, cookieJar = { cookie: '' }) {
+  if (path === '/api/auth/register' && typeof options.body === 'string') {
+    const payload = JSON.parse(options.body);
+    if (!payload.company) options = { ...options, body: JSON.stringify({ ...payload, company: 'Test company' }) };
+  }
   const res = await fetch(`${baseUrl}${path}`, {
     ...options,
     headers: { ...(options.headers || {}), cookie: cookieJar.cookie },
@@ -46,7 +50,8 @@ test('register creates a user and starts a session', async () => {
     const body = await res.json();
     assert.equal(body.ok, true);
     assert.equal(body.email, 'a@example.com');
-    assert.equal(body.targetLanguage, null);
+    assert.equal(body.sourceLanguage, 'Русский');
+    assert.equal(body.targetLanguage, 'Английский');
 
     const protectedRes = await fetchWithCookies(baseUrl, '/api/protected', {}, jar);
     assert.equal(protectedRes.status, 200);
@@ -76,6 +81,20 @@ test('register rejects a duplicate email', async () => {
   }
 });
 
+test('registration requires and persists the company', async () => {
+  const { app, db } = buildTestApp();
+  const server = await startServer(app); const baseUrl = `http://127.0.0.1:${server.address().port}`; const jar = { cookie: '' };
+  try {
+    const missing = await fetch(`${baseUrl}/api/auth/register`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'company-missing@example.com', password: 'password123' }) });
+    assert.equal(missing.status, 400); assert.equal((await missing.json()).code, 'COMPANY_REQUIRED');
+    const saved = await fetchWithCookies(baseUrl, '/api/auth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'company@example.com', password: 'password123', company: '  Lexiqs   Space  ' }) }, jar);
+    assert.equal(saved.status, 200); assert.equal((await saved.json()).company, 'Lexiqs Space');
+    assert.equal(db.prepare('SELECT company FROM users WHERE email = ?').get('company@example.com').company, 'Lexiqs Space');
+    const me = await fetchWithCookies(baseUrl, '/api/auth/me', {}, jar);
+    assert.equal((await me.json()).company, 'Lexiqs Space');
+  } finally { server.close(); }
+});
+
 test('login with correct credentials starts a session; wrong password is rejected', async () => {
   const { app } = buildTestApp();
   const server = await startServer(app);
@@ -84,7 +103,7 @@ test('login with correct credentials starts a session; wrong password is rejecte
     await fetch(`${baseUrl}/api/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'b@example.com', password: 'password123' }),
+      body: JSON.stringify({ email: 'b@example.com', password: 'password123', company: 'Test company' }),
     });
 
     const badLogin = await fetch(`${baseUrl}/api/auth/login`, {
@@ -151,7 +170,7 @@ test('register then login succeeds end-to-end (session.regenerate does not break
     await fetch(`${baseUrl}/api/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'd@example.com', password: 'password123' }),
+      body: JSON.stringify({ email: 'd@example.com', password: 'password123', company: 'Test company' }),
     });
 
     const jar = { cookie: '' };
@@ -164,7 +183,8 @@ test('register then login succeeds end-to-end (session.regenerate does not break
     const body = await loginRes.json();
     assert.equal(body.ok, true);
     assert.equal(body.email, 'd@example.com');
-    assert.equal(body.targetLanguage, null);
+    assert.equal(body.sourceLanguage, 'Русский');
+    assert.equal(body.targetLanguage, 'Английский');
 
     const me = await fetchWithCookies(baseUrl, '/api/auth/me', {}, jar);
     assert.equal(me.status, 200);

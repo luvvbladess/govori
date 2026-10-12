@@ -12,7 +12,7 @@ test('createDb creates users table with expected columns', () => {
     const columns = db.prepare("PRAGMA table_info(users)").all().map((c) => c.name);
     assert.deepEqual(
       columns.sort(),
-      ['created_at', 'email', 'id', 'password_hash', 'target_language'].sort()
+      ['company', 'created_at', 'email', 'id', 'password_hash', 'source_language', 'target_language'].sort()
     );
 
     const info = db.prepare(

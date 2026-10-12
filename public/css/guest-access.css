@@ -1,0 +1,112 @@
+.trial-remaining {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  min-height: 28px;
+  margin: 0;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--primary-soft);
+  color: var(--primary-strong);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.input-utility-row {
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: -3px 0 7px;
+}
+
+.input-utility-row:has(.trial-remaining[hidden]) {
+  justify-content: flex-end;
+}
+
+.is-authenticated .input-utility-row .app-preferences {
+  position: static !important;
+  display: flex !important;
+  flex: 0 0 auto;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+}
+
+.auth-back {
+  color: var(--muted);
+}
+
+.access-dialog {
+  width: min(calc(100% - 28px), 390px);
+  padding: 0;
+  border: 0;
+  border-radius: 16px;
+  background: var(--surface-raised);
+  color: var(--ink);
+}
+
+.access-dialog::backdrop {
+  background: rgba(9, 16, 28, .58);
+}
+
+.access-dialog-content {
+  position: relative;
+  display: grid;
+  gap: 11px;
+  padding: 24px;
+  text-align: center;
+}
+
+.access-dialog-content h2 {
+  margin: 4px 0 0;
+  font-size: 22px;
+  line-height: 1.2;
+  letter-spacing: -.025em;
+  text-wrap: balance;
+}
+
+.access-dialog-content p {
+  margin: 0 0 7px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+.access-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 25px;
+}
+
+.access-secondary {
+  min-height: 46px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--primary-strong);
+  font-weight: 750;
+}
+
+@media (max-width: 360px) {
+  .access-dialog-content { padding: 22px 18px 18px; }
+}
+
+@media (max-width: 440px) {
+  .brand-lockup strong { display: none; }
+  #pair-bar { gap: 8px !important; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .access-dialog { animation: none; }
+}
